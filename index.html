@@ -54,6 +54,7 @@ const $=s=>document.querySelector(s),v=$('#v');
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=s=>{s=Math.max(0,s||0);return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')};
 let au=null;
+const getDur=f=>new Promise(r=>{const a=new Audio(URL.createObjectURL(f));a.preload='metadata';const t=setTimeout(()=>r(0),8000);a.onloadedmetadata=()=>{clearTimeout(t);r(a.duration||0)};a.onerror=()=>{clearTimeout(t);r(0)}});
 function parse(t){const o=[];t.split(/\r?\n/).forEach(r=>{const l=r.trim();if(!l)return;const m=l.match(/^\[(\d+):(\d+(?:\.\d+)?)\]\s*(.*)$/);if(m)o.push({t:+m[1]*60+parseFloat(m[2]),text:m[3]||'♪'});else if(!/^\[[a-z]+:/i.test(l))o.push({t:null,text:l})});return o}
 function route(){if(au){au.pause();au=null}const h=location.hash;const isHome=!(h.startsWith('#song=')||h==='#admin');document.body.classList.toggle('home',isHome);const bv=$('#bgv');if(bv){if(isHome)bv.play().catch(()=>{});else bv.pause()}if(h.startsWith('#song='))song(h.slice(6));else if(h==='#admin')admin();else home()}
 addEventListener('hashchange',route);route();
@@ -76,7 +77,7 @@ async function song(id){
   <div class="row"><button id="pl">▶ Play</button><button id="dl" class="ghost">⬇ Download</button></div></div>`;
   au=new Audio(s.audio_url);let act=-1,counted=false;
   [...$('#ly').children].forEach((e,k)=>e.onclick=()=>{if(L[k].t!=null){au.currentTime=L[k].t;au.play()}});
-  au.onloadedmetadata=()=>{$('#sk').max=au.duration;$('#du').textContent=fmt(au.duration)};
+  au.onloadedmetadata=()=>{$('#sk').max=au.duration;$('#du').textContent=fmt(au.duration);if(L.length&&au.duration&&L.every(l=>l.t==null))L.forEach((l,i)=>l.t=i/L.length*au.duration)};
   au.onplay=()=>{$('#pl').textContent='⏸ Pause';if(!counted){counted=true;sb.rpc('bump_plays',{song_id:id})}};
   au.onpause=()=>$('#pl').textContent='▶ Play';
   au.ontimeupdate=()=>{$('#sk').value=au.currentTime;$('#cu').textContent=fmt(au.currentTime);let i=-1;L.forEach((l,k)=>{if(l.t!=null&&l.t<=au.currentTime)i=k});if(i!==act){act=i;[...$('#ly').children].forEach((e,k)=>e.classList.toggle('on',k===i));if(i>=0){const ly=$('#ly'),el=ly.children[i];ly.scrollTo({top:el.offsetTop-ly.clientHeight/2+el.offsetHeight/2,behavior:'smooth'})}}};
@@ -165,7 +166,7 @@ async function admin(){
     const title=$('#ti').value.trim(),f=$('#fa').files[0],c=$('#fc').files[0];
     if(!title||!f)return alert('Title and audio are required.');
     if(!lines.length)lines=parse($('#lr').value);
-    if(lines.some(l=>l.t==null)){const d=$('#pa').duration||0;lines.forEach((l,i)=>l.t=d?i/lines.length*d:null)}
+    if(lines.some(l=>l.t==null)){const d=await getDur(f);lines.forEach((l,i)=>l.t=d?i/lines.length*d:null)}
     $('#up').disabled=true;$('#st').textContent='Uploading… please wait.';
     try{const a=await put(f,'audio'),cv=c?await put(c,'covers'):null;
       const {error}=await sb.from('songs').insert({title,audio_url:a,cover_url:cv,lyrics:lines});if(error)throw error;
